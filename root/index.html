@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8"/>
+        <title>Julien Vernay</title>
+        <link rel="stylesheet" href="https://www.jvernay.fr/common/style.css" type="text/css">
+    </head>
+    <body>
+        <header>
+            <span id="name">Julien Vernay</span>
+            <nav>
+                <ul>
+                    <li><a href="https://www.jvernay.fr/en/">Home</a></li>
+                </ul>
+            </nav>
+        </header>
+
+        <main>
+
+<!-- PAGE CONTENT BEGIN -->
+<h1>Web experiments</h1>
+
+<p>
+    This website contains my experiments on web technologies. For now, they mainly concern Websockets and WebRTC.
+</p>
+
+<ul>
+    <li><a href="/chat/"><strong>chat</strong>: Chatting, using Websockets</a></li>
+    <li><a href="/chat-rtc"><strong>char-rtc</strong>: Chatting, but peer-to-peer using WebRTC (and Websockets for initial signaling)</a></li>
+</ul>
+
+<!-- PAGE CONTENT END -->
+
+</main>
+    
+<footer>
+    Want to contact me? Send a mail to <em>cont<span style="display:none">anti-bot</span>act@<span style="display:none">anti-bot</span>jvern<span style="display:none">anti-bot</span>ay.fr</em> .
+</footer>
+
+<script>
+    // Adapt page's title to content's title
+    document.getElementsByTagName("title")[0].textContent = document.getElementsByTagName("h1")[0].textContent + " - Julien Vernay";
+</script>
+</body>
+</html>
+
+
+

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8"/>
+        <style>
+            html, body { margin: 0; padding: 0; }
+            body {
+                height: 100vh; width: 100vw;
+                background-color: #448;
+                display: flex;
+                justify-content: center;
+                align-items: center; }
+            #login { background-color: #DDF;
+                     padding: 20px; 
+                     border: 2px solid black; }
+            #chat {
+                height: 100vh; width: 100vw;
+                display: flex;
+                align-items: stretch;
+                background-color: #DDF; }
+            #left {
+                flex: 0;
+                min-width: 20vw;
+                display: flex;
+                flex-direction: column;
+                align-items: stretch; 
+                border-right: 2px solid black; }
+            #displayID {
+                flex: 0;
+                font-weight: bold;
+                min-width: 50px;
+                text-align: center;
+                font-size: 2em;
+                border-bottom: 2px solid black; }
+            #users {
+                flex: 1;
+                text-align: center;
+                font-size: 1.5em; }
+            #right {
+                flex: 1;
+                display: flex;
+                flex-direction: column; }
+            #messages {
+                flex: 1;
+                overflow-y: scroll;
+                padding: 10px; }
+            #message {
+                flex: 0;
+                display: flex; }
+            #message_input {
+                flex: 1; }
+        </style>
+    </head>
+    <body>
+        <div id="login">
+            <h2>Example of chatbot using jv-session-rtc.js</h2>
+            <p>Leave ID empty to create a room.</p>
+            <input type="text" id="sessionID" placeholder="Session ID...">
+            <input type="password" id="password" placeholder="Password...">
+            <input type="username" id="username" placeholder="Username...">
+            <input type="button" id="join_session" value="Create / Join">
+        </div>
+        <div id="chat" style="display:none">
+            <div id="left">
+                <div id="displayID"></div>
+                <div id="users"></div>
+            </div>
+            <div id="right">
+                <div id="messages"></div>
+                <form id="message" onsubmit="SendMessage(); return false;">
+                    <input type="text" id="message_input" placeholder="Your message..."></input>
+                    <input type="button" id="send_message" value="Send message">
+                </form>
+            </div>
+        </div>
+
+        <script src="/mylibs/jv-session.js"></script>
+        <script src="/mylibs/jv-session-rtc.js"></script>
+        <script>
+            // Interface DOM elements.
+            const login = document.getElementById("login");
+            const sessionID = document.getElementById("sessionID");
+            const password = document.getElementById("password");
+            const username = document.getElementById("username");
+            const chat = document.getElementById("chat");
+            const displayID = document.getElementById("displayID");
+            const users = document.getElementById("users");
+            const messages = document.getElementById("messages");
+            const message_input = document.getElementById("message_input");
+            document.getElementById("join_session").onclick = () => JoinSession();
+            document.getElementById("send_message").onclick = () => SendMessage();
+
+            const WS_PROTOCOL = (window.location.protocol === "https:") ? "wss:" : "ws:";
+            const SERVER_URL = `${WS_PROTOCOL}//${window.location.host}/ws/`;
+
+            let sessionRTC = null;
+
+            async function JoinSession() {
+                try {
+                    let session = null;
+                    if (sessionID.value)
+                        session = await jvSession.join(SERVER_URL, sessionID.value, password.value, username.value);
+                    else
+                        session = await jvSession.create(SERVER_URL, password.value, username.value);
+                    sessionRTC = await jvSessionRTC.wrap(session);
+                    Setup();
+                    
+                } catch(e) {
+                    alert(e.toString());
+                }
+            }
+
+            function PrintUsers() {
+                users.innerHTML = "";
+                for (let user of sessionRTC.getUsers())
+                    users.innerHTML += `${user}<br/>`;
+            }
+
+            function EscapeHTML(text) {
+                const p = document.createElement("p");
+                p.textContent = text;
+                return p.innerHTML;
+            }
+
+            function Setup() {
+                login.style.display = "none";
+                chat.style.display = "";
+                displayID.textContent = `ID: ${sessionRTC.id}`;
+                PrintUsers();
+
+                sessionRTC.onJoin = (user) => {
+                    PrintUsers();
+                    messages.innerHTML += `<p><strong>${EscapeHTML(user)} has joined the session.</strong></p>`;
+                };
+
+                sessionRTC.onLeave = (user) => {
+                    PrintUsers();
+                    messages.innerHTML += `<p><strong>${EscapeHTML(user)} has left the session.</strong></p>`;
+                };
+
+                sessionRTC.onReception = (from, message) => {
+                    messages.innerHTML += `<p><strong>${EscapeHTML(from)}:</strong> ${EscapeHTML(message)}</p>`;
+                }
+            }
+
+            function SendMessage() {
+                if (message_input.value) {
+                    // 'null' means broadcast
+                    sessionRTC.send(null, message_input.value);
+                    message_input.value = "";
+                }
+            }
+        </script>
+    </body>
+</html>
