@@ -3,16 +3,18 @@
 
 class jvSession {
     // Creates a session on the provided server, and joins it with the given username.
+    // 'appname' should be hardcoded: each different use of the websocket server should use a different string for it.
+    // It is like a namespace for session IDs, so different apps will not join the same session.s
     // Returns the session. Share "session.id" so other users can join it.
     // Throws if a session could not be created.
-    static async create(websocket_url, password, username) {
-        return await new jvSession()._init(websocket_url, null, password, username);
+    static async create(websocket_url, appname, password, username) {
+        return await new jvSession()._init(websocket_url, appname, null, password, username);
     }
 
     // Joins an existing session on the provided server, using the given id.
     // Returns the session. Throws if ID not found, password invalid, or username already taken.
-    static async join(websocket_url, sessionID, password, username) {
-        return await new jvSession()._init(websocket_url, sessionID, password, username);
+    static async join(websocket_url, appname, sessionID, password, username) {
+        return await new jvSession()._init(websocket_url, appname, sessionID, password, username);
     }
 
     // Returns the list of usernames, ordered chronologically by arrivals.
@@ -77,7 +79,7 @@ class jvSession {
 
     // Initializes the session. If sessionId=null, will try to create a session before joining it.
     // Returns itself.
-    async _init(websocket_url, sessionId, password, username) {
+    async _init(websocket_url, appname, sessionId, password, username) {
         
         // First, open the websocket
         await new Promise((resolve,reject) => {
@@ -102,11 +104,11 @@ class jvSession {
 
             if (sessionId === null)
                 this.ws.send(JSON.stringify({
-                    action: "create", password: password, username: username,
+                    action: "create", password: password, username: username, appname: appname,
                 }));
             else 
                 this.ws.send(JSON.stringify({
-                    action: "join", id: sessionId, password: password, username: username,
+                    action: "join", id: sessionId, password: password, username: username, appname: appname,
                 }));
         });
 

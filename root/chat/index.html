@@ -97,9 +97,9 @@
             async function JoinSession() {
                 try {
                     if (sessionID.value)
-                        session = await jvSession.join(SERVER_URL, sessionID.value, password.value, username.value);
+                        session = await jvSession.join(SERVER_URL, "jv-chat", sessionID.value, password.value, username.value);
                     else
-                        session = await jvSession.create(SERVER_URL, password.value, username.value);
+                        session = await jvSession.create(SERVER_URL, "jv-chat", password.value, username.value);
                     Setup();
                     
                 } catch(e) {

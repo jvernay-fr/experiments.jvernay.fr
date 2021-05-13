@@ -41,14 +41,16 @@ class Session:
         }
     
 
-    def __init__(self, password):
+    def __init__(self, appname, password):
         """Creates a Session with the given password.
         Raises Session.IdNotFound if we could not allocate an ID for the Session."""
-
-        self._id = Session._allocateID()
+        if not appname in Session._all:
+            Session._all[appname] = {}
+        self._appname = appname
+        self._id = Session._allocateID(appname)
         self._connections = {}
         self._password = password
-        Session._all[self._id] = self
+        Session._all[appname][self._id] = self
         logging.info(f"Creation of session #{self.getDisplayID()}.")
     
 
@@ -95,7 +97,7 @@ class Session:
             
 
     @staticmethod
-    async def joinSession(displayID, websocket, username, password):
+    async def joinSession(displayID, websocket, appname, username, password):
         """Returns a connection linked to the session attributed with displayID.
         Raises Session.IdNotFound if the ID is not allocated.
         Raises Session.InvalidPassword if the password does not match.
@@ -103,10 +105,13 @@ class Session:
         try:
             id = int.from_bytes(base64.b16decode(displayID), "little")
         except:
-            raise Session.IdNotFound(f"Could not found session #{displayID}.")
-        if not id in Session._all:
-            raise Session.IdNotFound(f"Could not found session #{displayID}.")
-        session = Session._all[id]
+            raise Session.IdNotFound(f"Bad format of session ID: {displayID}.")
+        if not appname in Session._all:
+            raise Session.IdNotFound(f"Could not find session for app {appname}.")
+        appsessions = Session._all[appname]
+        if not id in appsessions:
+            raise Session.IdNotFound(f"Could not find session #{displayID}.")
+        session = appsessions[id]
         if session._password != password:
             raise Session.InvalidPassword(f"Invalid password.")
         
@@ -125,20 +130,20 @@ class Session:
             })
 
     def delete(self):
-        Session._all.pop(self._id) # remove itself from sessions
+        Session._all[self._appname].pop(self._id) # remove itself from sessions
         logging.info(f"Session #{self.getDisplayID()} is empty, and removed.")
 
     
     _all = {}
 
     @staticmethod
-    def _allocateID() -> int:
+    def _allocateID(appname) -> int:
         """Returns a random non-allocated ID as integer (< 2^24).
         Raises Session.IdNotFound if too many tries have been done without success."""
-
+        appsessions = Session._all[appname]
         for _ in range(20): # maximum 20 tries
             id = random.getrandbits(24)
-            if not id in Session._all:
+            if not id in appsessions:
                 # non-allocated ID found
                 return id
         # non-allocated ID not found, too many tries have been done.
@@ -173,7 +178,8 @@ async def handleWebsocket(websocket, path=None):
                         raise Session.AlreadyConnected(f"Already connected to session #{connection.session.getDisplayID()} as {connection.username}.")
                     password = request["password"]
                     username = request["username"]
-                    session = Session(password)
+                    appname = request["appname"]
+                    session = Session(appname, password)
                     try: # may throw if invalid username
                         connection = await session.join(websocket, username)
                     except:
@@ -188,7 +194,8 @@ async def handleWebsocket(websocket, path=None):
                     displayID = request["id"]
                     username = request["username"]
                     password = request["password"]
-                    connection = await Session.joinSession(displayID, websocket, username, password)
+                    appname = request["appname"]
+                    connection = await Session.joinSession(displayID, websocket, appname, username, password)
                     await websocket.send(json.dumps(connection.session.getState()))
                 
                 elif action == "send":
