@@ -17,6 +17,11 @@ class jvSessionRTC {
         return this._peers.keys();
     }
 
+    // Returns the RTCPeerConnection associated to this user.
+    getPeer(username) {
+        return this._peers.get(username);
+    }
+
     // Send a message to a user. Does not check if the user actually exist (in which case, the message will be discarded).
     // The users can react to messages by overriding "onReception".
     // Passing user=null will cause a broadcast (message sent to all users, including itself).
@@ -168,7 +173,11 @@ class jvSessionRTC {
 
     async _onSignalingReception(username, msg) {
         if (msg._jvrtc_ice !== undefined) {
-            await this._peers.get(username).addIceCandidate(msg._jvrtc_ice);
+            try {
+                await this._peers.get(username).addIceCandidate(msg._jvrtc_ice);
+            } catch (e) {
+                console.log("<jv-session-rtc> error with ice candidate, discarded");
+            }
         }
     }
 

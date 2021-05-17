@@ -204,6 +204,7 @@ async def handleWebsocket(websocket, path=None):
                     user = request["user"]
                     message = request["message"]
 
+                    logging.info(f"Message sent from {connection.username} to {user}: {message}")
                     try: await connection.session.send(user, {"from": connection.username, "message": message})
                     except Session.InvalidUsername: pass # discard message if username not found
 
@@ -248,7 +249,7 @@ async def handleWebsocket(websocket, path=None):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARN)
+    logging.basicConfig(level=logging.INFO)
 
     start_server = websockets.serve(handleWebsocket, "localhost", 1234)
 

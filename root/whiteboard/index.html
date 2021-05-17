@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8"/>
+        <title>Julien Vernay</title>
+        <link rel="stylesheet" href="style.css" type="text/css">
+    </head>
+    <body>
+
+        <main id="main" style="display:none">
+            <div id="left">
+                <div id="cameras"></div>
+                <div id="whiteboard">
+                    
+                </div>
+            </div>
+            <div id="right">
+                <div id="top">
+                    <button>Hide</button>
+                    <button>Help</button>
+                    <button>Info</button>
+                    <h2 id="roomID"></h2>
+                </div>
+                <div id="chat">
+                    <div class="meta">
+                        You have joined the room.
+                    </div>
+                </div>
+                <form id="chatInput">
+                    <textarea id="chatInputMessage" placeholder="Your message..." autocomplete="off" minlength="1" required rows="3" spellcheck="true"></textarea>
+                    <div id="chatButtons">
+                        <input type="button" value="File...">
+                        <input type="submit" value="Send">
+                    </div>
+                </form>
+            </div>
+        </main>
+
+
+        <div style="display:none">
+            <form id="joinForm">
+                <h1>jvWhiteboard</h1>
+                <ul>
+                    <li><input type="radio" id="actionCreate" name="action" value="create"><label for="actionCreate">Create room</label></li>
+                    <li><input type="radio" id="actionJoin" name="action" value="join" checked><label for="actionJoin">Join room</label>
+                        <input type="text" name="roomID" placeholder="Room ID..." size="6" minlength="6" maxlength="6" pattern="[A-F0-9]{6}"></li>
+                </ul>
+                <ul>
+                    <li><input type="text" name="password" placeholder="Password of room..."></li>
+                    <li><input type="text" name="username" placeholder="Your username..." minlength="1" required></li>
+                    <li><input type="submit" value="Connect"></li>
+                </ul>
+                <hr/>
+                <p>
+                    jvWhiteboard is an experimental remote tool for friends and teams.
+                    It allows a group to interact using chat, voice, camera and a whiteboard.
+                </p><p>
+                    It is free (as in freedom, under the AGPL license), on <a href="https://github.com/jvernay-fr/experiments.jvernay.fr">GitHub</a>.
+                    Under the hood, the communication is peer-to-peer (server is only used for signaling)
+                    and it is implemented using the WebRTC protocol.
+                </p>
+            </form>
+        </template>
+
+        <script src="popup.js"></script>
+        <script src="/mylibs/jv-session.js"></script>
+        <script src="/mylibs/jv-session-rtc.js"></script>
+        <script src="main.js"></script>
+        <script>
+        </script>
+    </body>
+</html>
+
+
+

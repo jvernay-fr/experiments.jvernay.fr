@@ -80,45 +80,51 @@ class jvSession {
     // Initializes the session. If sessionId=null, will try to create a session before joining it.
     // Returns itself.
     async _init(websocket_url, appname, sessionId, password, username) {
-        
-        // First, open the websocket
-        await new Promise((resolve,reject) => {
-            this.ws = new WebSocket(websocket_url);
-            this.ws.onerror = reject;
-            this.ws.addEventListener("open", resolve, {once: true});
-        });
+        try {
+            // First, open the websocket
+            await new Promise((resolve,reject) => {
+                this.ws = new WebSocket(websocket_url);
+                this.ws.onerror = reject;
+                this.ws.addEventListener("open", resolve, {once: true});
+            });
 
-        // Then, init the session and store its informations (id and _users)
-        await new Promise((resolve, reject) => {
-            this.ws.onerror = reject;
-            
-            this.ws.addEventListener("message", event => {
-                const response = JSON.parse(event.data);
-                if (response.error)
-                    reject(new Error(response.error));
-                this.id = response.id;
-                this.username = username;
-                this._users = response.users;
-                resolve();
-            }, {once: true});
+            // Then, init the session and store its informations (id and _users)
+            await new Promise((resolve, reject) => {
+                this.ws.onerror = reject;
+                
+                this.ws.addEventListener("message", event => {
+                    const response = JSON.parse(event.data);
+                    if (response.error)
+                        reject(new Error(response.error));
+                    this.id = response.id;
+                    this.username = username;
+                    this._users = response.users;
+                    resolve();
+                }, {once: true});
 
-            if (sessionId === null)
-                this.ws.send(JSON.stringify({
-                    action: "create", password: password, username: username, appname: appname,
-                }));
-            else 
-                this.ws.send(JSON.stringify({
-                    action: "join", id: sessionId, password: password, username: username, appname: appname,
-                }));
-        });
+                if (sessionId === null)
+                    this.ws.send(JSON.stringify({
+                        action: "create", password: password, username: username, appname: appname,
+                    }));
+                else 
+                    this.ws.send(JSON.stringify({
+                        action: "join", id: sessionId, password: password, username: username, appname: appname,
+                    }));
+            });
 
-        this.ws.onerror = this.onFatalError;
-        this.ws.onmessage = event => this._onMessage(JSON.parse(event.data));
+            this.ws.onerror = this.onFatalError;
+            this.ws.onmessage = event => this._onMessage(JSON.parse(event.data));
 
-        this._nextRequestID = 1;
-        this._waitingRequests = {};
+            this._nextRequestID = 1;
+            this._waitingRequests = {};
 
-        return this;
+            return this;
+        } catch (e) {
+            if (e.target instanceof WebSocket)
+                throw new Error(`Cannot connect to websocket server "${e.target.url}".`);
+            else
+                throw e;
+        }
     }
 
     // Responsible for dispatching all received messages after initialization.
