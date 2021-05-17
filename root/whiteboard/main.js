@@ -1,5 +1,7 @@
 
-const WEBSOCKET_URL = "ws://localhost:1234";
+
+const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
+const SERVER_URL = `${WS_PROTOCOL}//${window.location.host}/ws/`;
 
 class jvWhiteboard {
     
@@ -125,9 +127,9 @@ class jvWhiteboard {
                 const password = formData.get("password");
                 const username = formData.get("username");
                 if (action === "create") {
-                    session = await jvSession.create(WEBSOCKET_URL, "jv-whiteboard", password, username);
+                    session = await jvSession.create(SERVER_URL, "jv-whiteboard", password, username);
                 } else if (action === "join") {
-                    session = await jvSession.join(WEBSOCKET_URL, "jv-whiteboard", roomID, password, username);
+                    session = await jvSession.join(SERVER_URL, "jv-whiteboard", roomID, password, username);
                 } else {
                     throw new Error(`Unkown action ${action}...`);
                 }
