@@ -11,14 +11,37 @@
             <div id="left">
                 <div id="cameras"></div>
                 <div id="whiteboard">
-                    
+                    <div id="tools">
+                        <select id="toolCategory">
+                            <option value="pencil">✎&emsp; Pencil</option>
+                            <option value="line">㇀&emsp; Line</option>
+                            <option value="emptyRect">□&emsp; Rectangle</option>
+                            <option value="filledRect">■&emsp; Filled Rectangle</option>
+                            <option value="emptyCircle">○&emsp; Circle</option>
+                            <option value="filledCircle">●&emsp; Filled Circle</option>
+                            <option value="filledCircle">T⃞ &emsp; Text</option>
+                        </select>
+                        <select id="toolThickness">
+                            <option value="5">▏&emsp; Thiner</option>
+                            <option value="10">▎&emsp; Thin</option>
+                            <option value="20">▌&emsp; Normal</option>
+                            <option value="35">▊&emsp; Thick</option>
+                            <option value="50">█&emsp; Thicker</option>
+                        </select>
+                        <input id="toolColor" type="color">
+                        <select id="toolOpacity">
+                            <option value="1">█&emsp; 100% Opacity</option>
+                            <option value="0.75">▓&emsp; 75% Opacity</option>
+                            <option value="0.50">▒&emsp; 50% Opacity</option>
+                            <option value="0.25">░&emsp; 25% Opacity</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div id="right">
                 <div id="top">
-                    <button>Hide</button>
-                    <button>Help</button>
-                    <button>Info</button>
+                    <button disabled>Help</button>
+                    <button disabled>Info</button>
                     <h2 id="roomID"></h2>
                 </div>
                 <div id="chat">
@@ -29,7 +52,7 @@
                 <form id="chatInput">
                     <textarea id="chatInputMessage" placeholder="Your message..." autocomplete="off" minlength="1" required rows="3" spellcheck="true"></textarea>
                     <div id="chatButtons">
-                        <input type="button" value="File...">
+                        <input disabled type="button" value="File...">
                         <input type="submit" value="Send">
                     </div>
                 </form>
@@ -60,7 +83,9 @@
                     and it is implemented using the WebRTC protocol.
                 </p>
             </form>
-        </template>
+        </div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/svg.js/3.0.16/svg.min.js"></script>
 
         <script src="popup.js"></script>
         <script src="/mylibs/jv-session.js"></script>
