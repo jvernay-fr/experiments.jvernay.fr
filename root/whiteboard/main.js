@@ -15,7 +15,9 @@ class jvWhiteboardSVG {
         this.toolCategory = document.getElementById("toolCategory");
         this.toolThickness = document.getElementById("toolThickness");
         this.toolColor = document.getElementById("toolColor");
+        this.toolSize = document.getElementById("toolSize");
         this.toolOpacity = document.getElementById("toolOpacity");
+        this.toolText = document.getElementById("toolText");
 
         this.svg = SVG().addTo("#whiteboard").size("100%", "100%");
         this.svgCursor = null; // current form we are drawing
@@ -25,6 +27,22 @@ class jvWhiteboardSVG {
         this.svgElem.addEventListener("mousemove", e => this._mouseMove(e));
         this.svgElem.addEventListener("mouseup", e => this._mouseUp(e));
 
+        const onCategoryChange = () => {
+            const category = this.toolCategory.value;
+            this.toolThickness.style.display = ["filledRect", "filledCircle", "text"].includes(category) ? "none" : "";
+            this.toolText.style.display = (category === "text" ? "" : "none");
+            this.toolSize.style.display = (category === "text" ? "" : "none");
+        };
+
+        document.getElementById("resetButton").addEventListener("click", async () => {
+            await new jvPopup(document.getElementById("resetConfirm")).display();
+        });
+        document.getElementById("saveButton").addEventListener("click", () => {
+            saveSvgAsPng(this.svgElem, "whiteboard.png");
+        });
+
+        this.toolCategory.addEventListener("input", onCategoryChange);
+        onCategoryChange();
 
         // array of { elem, create, attr, isDone }, transmitted to other peers.
         this._history = [];
@@ -41,11 +59,13 @@ class jvWhiteboardSVG {
 
         this._sendMessage = sendMessage;
         
-        console.log(isAlone);
         if (!isAlone)
             this._sendMessage(null, {askHistory: true});
     }
 
+    reset() {
+        this._sendMessage(null, {reset: true});
+    }
 
     messageReception(from, msg) {
         if (this._incoming !== null) {
@@ -76,6 +96,10 @@ class jvWhiteboardSVG {
                return { from: figure.from, create: figure.create, attr: figure.attr, isDone: figure.isDone };
             })});
         }
+        else if (msg.reset) {
+            this._history = [];
+            this.svg.clear();
+        }
         else if (msg.create) {
             const pos = msg.create.pos;
             let elem;
@@ -85,6 +109,23 @@ class jvWhiteboardSVG {
                     break;
                 case "line":
                     elem = this.svg.line(...pos, ...pos).stroke(msg.create.stroke);
+                    break;
+                case "emptyRect":
+                    elem = this.svg.rect(0, 0, 0, 0).move(...pos).fill("none").stroke(msg.create.stroke);
+                    break;
+                case "filledRect":
+                    elem = this.svg.rect(0, 0, 0, 0).move(...pos).fill(msg.create.stroke);
+                    break;
+                case "emptyCircle":
+                    elem = this.svg.ellipse(0, 0).move(...pos).fill("none").stroke(msg.create.stroke);
+                    break;
+                case "filledCircle":
+                    elem = this.svg.ellipse(0, 0).move(...pos).fill(msg.create.stroke);
+                    break;
+                case "text":
+                    elem = this.svg.text(msg.create.text).move(...pos).font(
+                        { fill: msg.create.stroke.color, "font-size": msg.create.size, "fill-opacity": msg.create.stroke.opacity }
+                    );
                     break;
             }
             this._history.push({ elem: elem, from: from, create: msg.create, attr: {}, isDone: false});
@@ -106,8 +147,19 @@ class jvWhiteboardSVG {
         this.svgRect = this.svgElem.getBoundingClientRect();
         const pos = [ e.clientX - this.svgRect.left, e.clientY - this.svgRect.top ];
         const stroke = {color : this.toolColor.value, opacity: this.toolOpacity.value, width: this.toolThickness.value, linecap: "round"};
-        this._cursorInfo = "";
-        this._sendMessage(null, {create: {kind: this.toolCategory.value, stroke: stroke, pos: pos}});
+        const msg = {create: {kind: this.toolCategory.value, stroke: stroke, pos: pos}};
+        switch (this.toolCategory.value) {
+            case "pencil":    this._cursorInfo = ""; break;
+            case "emptyRect":
+            case "filledRect":
+            case "emptyCircle":
+            case "filledCircle": this._cursorInfo = pos; break;
+            case "text":
+                msg.create.text = this.toolText.value;
+                msg.create.size = this.toolSize.value;
+                break;
+        }
+        this._sendMessage(null, msg);
     }
     _mouseMove(e) {
         if (this.svgRect === null) return;
@@ -120,6 +172,26 @@ class jvWhiteboardSVG {
             case "line":
                 this._sendMessage(null, {update: {x2: pos[0], y2: pos[1]}});
                 break;
+            case "emptyRect":
+            case "filledRect": {
+                let x1 = Math.min(this._cursorInfo[0], pos[0]);
+                let x2 = Math.max(this._cursorInfo[0], pos[0]);
+                let y1 = Math.min(this._cursorInfo[1], pos[1]);
+                let y2 = Math.max(this._cursorInfo[1], pos[1]);
+                this._sendMessage(null, {update: {x: x1, y: y1, width: x2-x1, height: y2-y1 }});
+                break; }
+            case "emptyCircle":
+            case "filledCircle": {
+                let x1 = Math.min(this._cursorInfo[0], pos[0]);
+                let x2 = Math.max(this._cursorInfo[0], pos[0]);
+                let y1 = Math.min(this._cursorInfo[1], pos[1]);
+                let y2 = Math.max(this._cursorInfo[1], pos[1]);
+                this._sendMessage(null, {update: { cx: (x1+x2)/2, cy: (y1+y2)/2, rx: (x2-x1)/2, ry: (y2-y1)/2 }});
+                break; }
+            case "text": {
+                this._sendMessage(null, {update: {x: pos[0], y: pos[1]}});
+                break;
+            }
         }
     }
     _mouseUp(e) {
@@ -200,10 +272,8 @@ class jvWhiteboard {
         const peer = this._session.getPeer(user);
         let {video} = this._createVideoFor(user);
         peer.ontrack = event => {
-            console.log("received", event.track);
             video.srcObject = event.streams[0];
         };
-        console.log("sendmevideo", user);
         this._session.send(user, {sendmevideo:""});
     }
 
@@ -230,7 +300,6 @@ class jvWhiteboard {
         if (chat) {
             this.pushChatMessage(from, chat, false);
         } else if (sendmevideo !== undefined) {
-            console.log("received", from, this._cameras);
             if (!this._cameras[from]) this._setupPeer(from);
             const peer = this._session.getPeer(from);
             for (let track of this._mymedia.getTracks())
@@ -284,3 +353,7 @@ class jvWhiteboard {
 
 let whiteboard = null; // storing whiteboard for debugging purposes in browser console.
 jvWhiteboard.askRoom().then(w => { whiteboard = w; });
+
+function ResetBoard() {
+    whiteboard._svg.reset();
+}

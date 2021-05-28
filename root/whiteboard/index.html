@@ -19,7 +19,7 @@
                             <option value="filledRect">■&emsp; Filled Rectangle</option>
                             <option value="emptyCircle">○&emsp; Circle</option>
                             <option value="filledCircle">●&emsp; Filled Circle</option>
-                            <option value="filledCircle">T⃞ &emsp; Text</option>
+                            <option value="text">T⃞ &emsp; Text</option>
                         </select>
                         <select id="toolThickness">
                             <option value="5">▏&emsp; Thiner</option>
@@ -28,6 +28,13 @@
                             <option value="35">▊&emsp; Thick</option>
                             <option value="50">█&emsp; Thicker</option>
                         </select>
+                        <select id="toolSize">
+                            <option value="10">10&emsp; Smaller</option>
+                            <option value="20">20&emsp; Small</option>
+                            <option value="40">40&emsp; Normal</option>
+                            <option value="70">70&emsp; Big</option>
+                            <option value="90">90&emsp; Bigger</option>
+                        </select>
                         <input id="toolColor" type="color">
                         <select id="toolOpacity">
                             <option value="1">█&emsp; 100% Opacity</option>
@@ -35,6 +42,11 @@
                             <option value="0.50">▒&emsp; 50% Opacity</option>
                             <option value="0.25">░&emsp; 25% Opacity</option>
                         </select>
+                        <textarea id="toolText" placeholder="Text..."></textarea>
+                    </div>
+                    <div id="globalActions">
+                        <button id="saveButton" title="Save image">🖼</button>
+                        <button id="resetButton" title="Reset whiteboard">🚫</button>
                     </div>
                 </div>
             </div>
@@ -82,17 +94,32 @@
                     Under the hood, the communication is peer-to-peer (server is only used for signaling)
                     and it is implemented using the WebRTC protocol.
                 </p>
+                <hr/>
+                <ul>
+                    Used libraries: 
+                    <li><a href="https://svgdotjs.github.io/">SVG.js</a></li>
+                    <li><a href="https://github.com/exupero/saveSvgAsPng">saveSvgAsPng.js</a></li>
+                </ul>
+            </form>
+            <form id="resetConfirm">
+                <h2>Do you want to reset the whiteboard?</h2>
+                <p>
+                    The drawing panel will be blank for everyone, and the current content will be lost.
+                </p>
+                <ul>
+                    <li><input type="submit" value="Reset whiteboard" onclick="ResetBoard()"></li>
+                    <li><input type="submit" value="Cancel"></li>
+                </ul>
             </form>
         </div>
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/svg.js/3.0.16/svg.min.js"></script>
 
+        <script src="saveSvgAsPng.js"></script>
         <script src="popup.js"></script>
         <script src="/mylibs/jv-session.js"></script>
         <script src="/mylibs/jv-session-rtc.js"></script>
         <script src="main.js"></script>
-        <script>
-        </script>
     </body>
 </html>
 
