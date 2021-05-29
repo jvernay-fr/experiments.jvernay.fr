@@ -50,9 +50,8 @@ class jvSession {
     close() { this.ws.close(); }
 
     // Called when a request is received. Should be overriden, e.g. "session.onRequest = async function(...) {...};".
-    // 'reply' is a function to be called to give the response to the request.
-    // 'reply(answer)' must be called, else the requesting user will be awaiting forever.
-    async onRequest(from, msg, reply) { reply(`REQUEST NOT HANDLED: ${msg}`); }
+    // You must return the response, which will be passed to the asker.
+    async onRequest(from, msg) { return `REQUEST NOT HANDLED: ${msg}`; }
 
     // Called when a message (which is not a request) is received. Should be overriden.
     async onReception(from, msg) { console.log(`MESSAGE FROM ${from}: ${msg}`); }
@@ -130,11 +129,10 @@ class jvSession {
     // Responsible for dispatching all received messages after initialization.
     async _onMessage(msg) {
         if (msg.request !== undefined) {
-            this.onRequest(msg.from, msg.request, response => {
-                this.ws.send(JSON.stringify({
-                    action: "response", user: msg.from, message: response, id: msg.id,
-                }));
-            });
+            const response = await this.onRequest(msg.from, msg.request);
+            this.ws.send(JSON.stringify({
+                action: "response", user: msg.from, message: response, id: msg.id,
+            }));
         } else if (msg.response !== undefined) {
             let id = Number(msg.id);
             let requestHandler = this._waitingRequests[id];

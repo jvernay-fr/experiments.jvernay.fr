@@ -21,8 +21,9 @@ class jvPopup {
 
         document.getElementsByTagName("body")[0].appendChild(this._popupBG);
         this._popupBG.appendChild(this._popup);
-        this._popup.appendChild(formElement.cloneNode(true));
-        this._form = this._popup.children[0];
+        this._formPreviousParent = formElement.parentNode;
+        this._popup.appendChild(formElement);
+        this._form = formElement;
         
         this._popupBG.style.display = "none";
     }
@@ -52,6 +53,8 @@ class jvPopup {
 
     // Destroys the popup, removing from the DOM.
     destroy() {
+        if (this._formPreviousParent)
+            this._formPreviousParent.appendChild(this._form);
         document.getElementsByTagName("body")[0].removeChild(this._popupBG);
     }
 

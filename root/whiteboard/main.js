@@ -1,283 +1,83 @@
 
+// Helper for DOM access
+const $ = (query) => document.querySelector(query);
 
-const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
-const SERVER_URL = `${WS_PROTOCOL}//${window.location.host}/ws/`;
 
+async function InitSignalingSession() {// First, we ask the room ID, password, etc, by displaying a popup.
+    const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const SERVER_URL = `${WS_PROTOCOL}//${window.location.host}/ws/`;
 
-// Responsible for all SVG manipulations
-class jvWhiteboardSVG {
-    // 'isAlone' determines whether the SVG will ask an history to peers.
-    // 'sendMessage(dest, msg)' is called when the SVG state is modified.
-    // 'msg' must be transmitted to 'dest', or broadcasted if 'dest === null',
-    // by calling "messageReception" on the peers' SVG.
-    constructor(isAlone, sendMessage) {
-
-        this.toolCategory = document.getElementById("toolCategory");
-        this.toolThickness = document.getElementById("toolThickness");
-        this.toolColor = document.getElementById("toolColor");
-        this.toolSize = document.getElementById("toolSize");
-        this.toolOpacity = document.getElementById("toolOpacity");
-        this.toolText = document.getElementById("toolText");
-
-        this.svg = SVG().addTo("#whiteboard").size("100%", "100%");
-        this.svgCursor = null; // current form we are drawing
-
-        this.svgElem = document.getElementsByTagName("svg")[0];
-        this.svgElem.addEventListener("mousedown", e => this._mouseDown(e));
-        this.svgElem.addEventListener("mousemove", e => this._mouseMove(e));
-        this.svgElem.addEventListener("mouseup", e => this._mouseUp(e));
-
-        const onCategoryChange = () => {
-            const category = this.toolCategory.value;
-            this.toolThickness.style.display = ["filledRect", "filledCircle", "text"].includes(category) ? "none" : "";
-            this.toolText.style.display = (category === "text" ? "" : "none");
-            this.toolSize.style.display = (category === "text" ? "" : "none");
-        };
-
-        document.getElementById("resetButton").addEventListener("click", async () => {
-            await new jvPopup(document.getElementById("resetConfirm")).display();
-        });
-        document.getElementById("saveButton").addEventListener("click", () => {
-            saveSvgAsPng(this.svgElem, "whiteboard.png");
-        });
-
-        this.toolCategory.addEventListener("input", onCategoryChange);
-        onCategoryChange();
-
-        // array of { elem, create, attr, isDone }, transmitted to other peers.
-        this._history = [];
-
-        // array of incoming messages which cannot be processed at the time (because we want to process history first).
-        // 'null' when messages can be handled directly.
-        this._incoming = isAlone ? null : [];
-        
-        // dictionnary { username: historyIndex }, mapping peers to currently editing figure.
-        this._cursors = {};
-
-        // store client position of SVG element, supposed constant when drawing
-        this.svgRect = null;
-
-        this._sendMessage = sendMessage;
-        
-        if (!isAlone)
-            this._sendMessage(null, {askHistory: true});
-    }
-
-    reset() {
-        this._sendMessage(null, {reset: true});
-    }
-
-    messageReception(from, msg) {
-        if (this._incoming !== null) {
-            if (msg.history) {
-                // let's "receive" the history one by one
-                for (let { from, create, attr, isDone } of msg.history) {
-                    this.messageReception(from, {create: create});
-                    this.messageReception(from, {update: attr});
-                    if (isDone)
-                        this.messageReception(from, {end: true});
-                }
-                let incoming = this._incoming;
-                this._incoming = null;
-                // let's receive unhandled messages
-                for (let {from, msg} of incoming)
-                    this.messageReception(from, msg);
+    const form = $("#joinForm");
+    const formPopup = new jvPopup(form);
+    let signalingSession = null;
+    while (true) {
+        const formData = await formPopup.display("keep");
+        try {
+            const action = formData.get("action");
+            const roomID = formData.get("roomID");
+            const password = formData.get("password");
+            const username = formData.get("username");
+            // We try to create/join a room (exception thrown if we could not do it).
+            if (action === "create") {
+                signalingSession = await jvSession.create(SERVER_URL, "jv-whiteboard", password, username);
+            } else if (action === "join") {
+                signalingSession = await jvSession.join(SERVER_URL, "jv-whiteboard", roomID, password, username);
             } else {
-                this._incoming.push({from: from, msg: msg});
+                throw new Error(`Unkown action ${action}...`);
             }
-            return;
+            // No exception occured, we are connected to the signaling server.
+            break;
+        } catch(e) {
+            alert(e.toString());
         }
-        if (msg.history) {
-            return; // we already received one history, discard others
-        }
-        else if (msg.askHistory) {
-            // reply with our history
-            this._sendMessage(from, {history: this._history.map(figure => {
-               return { from: figure.from, create: figure.create, attr: figure.attr, isDone: figure.isDone };
-            })});
-        }
-        else if (msg.reset) {
-            this._history = [];
-            this.svg.clear();
-        }
-        else if (msg.create) {
-            const pos = msg.create.pos;
-            let elem;
-            switch (msg.create.kind) {
-                case "pencil":
-                    elem = this.svg.polyline(`${pos[0]},${pos[1]}`).fill("none").stroke(msg.create.stroke);
-                    break;
-                case "line":
-                    elem = this.svg.line(...pos, ...pos).stroke(msg.create.stroke);
-                    break;
-                case "emptyRect":
-                    elem = this.svg.rect(0, 0, 0, 0).move(...pos).fill("none").stroke(msg.create.stroke);
-                    break;
-                case "filledRect":
-                    elem = this.svg.rect(0, 0, 0, 0).move(...pos).fill(msg.create.stroke);
-                    break;
-                case "emptyCircle":
-                    elem = this.svg.ellipse(0, 0).move(...pos).fill("none").stroke(msg.create.stroke);
-                    break;
-                case "filledCircle":
-                    elem = this.svg.ellipse(0, 0).move(...pos).fill(msg.create.stroke);
-                    break;
-                case "text":
-                    elem = this.svg.text(msg.create.text).move(...pos).font(
-                        { fill: msg.create.stroke.color, "font-size": msg.create.size, "fill-opacity": msg.create.stroke.opacity }
-                    );
-                    break;
-            }
-            this._history.push({ elem: elem, from: from, create: msg.create, attr: {}, isDone: false});
-            this._cursors[from] = this._history.length - 1;
-        }
-        else if (msg.update) {
-            const figure = this._history[this._cursors[from]];
-            figure.elem.attr(msg.update);
-            figure.attr = { ...figure.attr, ...msg.update };
-        }
-        else if (msg.end) {
-            this._history[this._cursors[from]].isDone = true;
-            this._cursors[from] = null;
-        }
+        // If an exception was catched, we ask again.
+        continue;
     }
-
-
-    _mouseDown(e) {
-        this.svgRect = this.svgElem.getBoundingClientRect();
-        const pos = [ e.clientX - this.svgRect.left, e.clientY - this.svgRect.top ];
-        const stroke = {color : this.toolColor.value, opacity: this.toolOpacity.value, width: this.toolThickness.value, linecap: "round"};
-        const msg = {create: {kind: this.toolCategory.value, stroke: stroke, pos: pos}};
-        switch (this.toolCategory.value) {
-            case "pencil":    this._cursorInfo = ""; break;
-            case "emptyRect":
-            case "filledRect":
-            case "emptyCircle":
-            case "filledCircle": this._cursorInfo = pos; break;
-            case "text":
-                msg.create.text = this.toolText.value;
-                msg.create.size = this.toolSize.value;
-                break;
-        }
-        this._sendMessage(null, msg);
-    }
-    _mouseMove(e) {
-        if (this.svgRect === null) return;
-        const pos = [ e.clientX - this.svgRect.left, e.clientY - this.svgRect.top ];
-        switch (this.toolCategory.value) {
-            case "pencil":
-                this._cursorInfo = `${this._cursorInfo} ${pos[0]},${pos[1]}`;
-                this._sendMessage(null, {update: {points: this._cursorInfo}});
-                break;
-            case "line":
-                this._sendMessage(null, {update: {x2: pos[0], y2: pos[1]}});
-                break;
-            case "emptyRect":
-            case "filledRect": {
-                let x1 = Math.min(this._cursorInfo[0], pos[0]);
-                let x2 = Math.max(this._cursorInfo[0], pos[0]);
-                let y1 = Math.min(this._cursorInfo[1], pos[1]);
-                let y2 = Math.max(this._cursorInfo[1], pos[1]);
-                this._sendMessage(null, {update: {x: x1, y: y1, width: x2-x1, height: y2-y1 }});
-                break; }
-            case "emptyCircle":
-            case "filledCircle": {
-                let x1 = Math.min(this._cursorInfo[0], pos[0]);
-                let x2 = Math.max(this._cursorInfo[0], pos[0]);
-                let y1 = Math.min(this._cursorInfo[1], pos[1]);
-                let y2 = Math.max(this._cursorInfo[1], pos[1]);
-                this._sendMessage(null, {update: { cx: (x1+x2)/2, cy: (y1+y2)/2, rx: (x2-x1)/2, ry: (y2-y1)/2 }});
-                break; }
-            case "text": {
-                this._sendMessage(null, {update: {x: pos[0], y: pos[1]}});
-                break;
-            }
-        }
-    }
-    _mouseUp(e) {
-        this._sendMessage(null, {stop: true});
-        this.svgRect = null;
-    }
+    formPopup.destroy(); // the popup is not needed anymore.
+    return signalingSession;
 }
 
-class jvWhiteboard {
-    
-    async init(session) {
-        this._session = session;
-        this._session.onJoin = (...a) => this.onJoin(...a);
-        this._session.onLeave = (...a) => this.onLeave(...a);
-        this._session.onReception = (...a) => this.onReception(...a);
+async function SetupCameras(rtc) {
+    const cameras = $("#cameras");
 
-        this._username = this._session.username;
-
-        document.getElementById("roomID").textContent = `ID: ${this._session.id}`;
-
-        document.getElementById("main").style.display = "";
-        this._chatOutput = document.getElementById("chat");
-
-        this._chatInputMessage = document.getElementById("chatInputMessage");
-        this._chatInputMessage.addEventListener("keydown", event => {
-            if (event.key === "Enter" && !event.shiftKey)
-                this.onChatSubmit(event);
-        });
-
-        document.getElementById("chatInput").addEventListener("submit", event => this.onChatSubmit(event));
-
-        // Camera
-        this._camerasElem = document.getElementById("cameras");
-        this._cameras = {};
-
-        try {
-            this._mymedia = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: 300, height: 150 }});
-        } catch(e) {
-            this._mymedia = null;
-            alert("Error while opening your camera and microphone");
-        }
-        
-
-        let nbUsers = 0;
-        for (let user of this._session.getUsers()) {
-            ++nbUsers;
-            if (user === this._username) continue;
-            this._setupPeer(user);
-        }
-        let {video} = this._createVideoFor(this._username);
-        video.srcObject = this._mymedia;
-        video.volume = 0; // we don't want to hear ourself
-
-        this._svg = new jvWhiteboardSVG(nbUsers === 1, (dest, msg) => {
-            this._session.send(dest, { svg: msg });
-        });
-        
-        return this;
-    }
-
-
-    _createVideoFor(username) {
-        const div = this._camerasElem.appendChild(document.createElement("div"));
-
+    // Called when someone opens a stream, i.e. to respond to a "sendmevideo" message.
+    rtc.onStreamBegin = (from, stream) => {
+        // creating <div><video></video><p></p></div>
+        const div = cameras.appendChild(document.createElement("div"));
         const video = div.appendChild(document.createElement("video"));
         video.setAttribute("autoplay", "");
         video.setAttribute("controls", "");
+        video.srcObject = stream;
+        if (from === rtc.username) video.volume = 0; // we do not want to echo ourself
 
         const p = div.appendChild(document.createElement("p"));
-        p.textContent = username;
+        p.textContent = from;
 
-        this._cameras[username] = { div: div, video: video };
+        return div;
+    };
+    // Called when the stream is closed, 'div' is the returned value from onStreamBegin;
+    rtc.onStreamEnd = (from, div) => {
+        cameras.removeChild(div);
+    };
 
-        return this._cameras[username];
+    try {
+        const mymedia = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: 300, height: 150 }});
+        // if we could open the stream, broadcast it to all peers.
+        rtc.beginStream(null, mymedia);
+        // if we could open the stream, be prepared to answer "sendmevideo" messages.
+        rtc.receptionHandlers.add((from, {sendmevideo}) => {
+            if (sendmevideo) rtc.beginStream(from, mymedia);
+        });
+    } catch(e) {
+        // we could not open the stream, notify the user.
+        alert(`Error while opening your camera and microphone: ${e.toString()}`);
     }
+    // ask other peers their videos
+    rtc.send(null, {sendmevideo: true});
+}
 
-    _setupPeer(user) {
-        const peer = this._session.getPeer(user);
-        let {video} = this._createVideoFor(user);
-        peer.ontrack = event => {
-            video.srcObject = event.streams[0];
-        };
-        this._session.send(user, {sendmevideo:""});
-    }
-
-    pushChatMessage(from, message, isMeta) {
+async function SetupChat(rtc) {
+    const displayMessage = (from, message, isMeta) => {
         const div = document.createElement("div");
         if (from) {
             const name = document.createElement("strong");
@@ -286,74 +86,209 @@ class jvWhiteboard {
         }
         div.appendChild(document.createTextNode(message));
         if (isMeta) div.className = "meta";
-        this._chatOutput.appendChild(div);
-    }
+        $('#chat').appendChild(div);
+    };
 
-    onChatSubmit(event) {
+    const msgInput = $("#chatInputMessage");
+
+    $("#chatInput").onsubmit = event => {
         event.preventDefault();
-        const msg = this._chatInputMessage.value;
-        this._session.send(null, { "chat": msg });
-        this._chatInputMessage.value = "";
-    }
+        rtc.send(null, {chat: msgInput.value});
+        msgInput.value = "";
+    };
 
-    onReception(from, {chat, sendmevideo, svg}) {
-        if (chat) {
-            this.pushChatMessage(from, chat, false);
-        } else if (sendmevideo !== undefined) {
-            if (!this._cameras[from]) this._setupPeer(from);
-            const peer = this._session.getPeer(from);
-            for (let track of this._mymedia.getTracks())
-                peer.addTrack(track, this._mymedia);
-        } else if (svg !== undefined) {
-            if (from === this._username && svg.askHistory)
-                return; // we cannot reply to our history request
-            this._svg.messageReception(from, svg);
+    msgInput.onkeydown = event => {
+        if (event.key === "Enter" && !event.shiftKey)
+            $("#chatInput").onsubmit(event);
+    };
+
+    rtc.receptionHandlers.add((from, {chat, svg}) => {
+        // Reacting to message sent.
+        if (chat) displayMessage(from, chat, false);
+        // Reacting to reset whiteboard.
+        if (svg && svg.reset) displayMessage(null, `${from} has reset the whiteboard.`, true);
+    });
+    // Reacting to join/leave
+    rtc.onJoin = user => {
+        displayMessage(null, `${user} has joined the room.`, true);
+    };
+    rtc.onLeave = user => {
+        displayMessage(null, `${user} has left the room.`, true);
+    };
+}
+
+async function SetupSVG(rtc) {
+    // create the SVG element
+    const svg = SVG().addTo("#whiteboard").size("100%", "100%");
+    const svgElem = $("svg");
+
+    // Tools reactions to category changes
+    $("#toolCategory").onchange = () => {
+        const category = this.toolCategory.value;
+        $("#toolThickness").style.display = ["filledRect", "filledCircle", "text"].includes(category) ? "none" : "";
+        $("#toolText").style.display = (category === "text" ? "" : "none");
+        $("#toolSize").style.display = (category === "text" ? "" : "none");
+    };
+    $("#toolCategory").onchange(); // ensure cached form will not mess up
+
+    // Global actions handlers
+    $("#resetButton").onclick = () => new jvPopup($("#resetConfirm")).display();
+    $("#resetConfirmBtn").onclick = () => rtc.send(null, {svg: {reset: true}});
+    $("#saveButton").onclick = () => saveSvgAsPng(svgElem, "whiteboard.png");
+
+    // Storing all figures, so a new comer can ask us the current whiteboard state.
+    let history = [];
+    // Storing all currently editing figures for everyone.
+    const cursors = {};
+
+    // Figure creations.
+    const handleCreate = {
+        pencil: ({pos,stroke}) => svg.polyline(`${pos[0]},${pos[1]}`).fill("none").stroke(stroke),
+        line: ({pos,stroke}) => svg.line(...pos, ...pos).stroke(stroke),
+        emptyRect: ({pos,stroke}) => svg.rect(0,0,0,0).move(...pos).fill("none").stroke(stroke),
+        filledRect: ({pos,stroke}) => svg.rect(0,0,0,0).move(...pos).fill(stroke),
+        emptyCircle: ({pos,stroke}) => svg.ellipse(0,0).move(...pos).fill("none").stroke(stroke),
+        filledCircle: ({pos,stroke}) => svg.ellipse(0,0).move(...pos).fill(stroke),
+        text: ({pos,text,stroke,size}) => svg.text(text).move(...pos).font(
+                    { fill: stroke.color, "font-size": size, "fill-opacity": stroke.opacity }),
+    };
+
+    const handleMessage = (user, {askHistory, reset, create, update, end}) => {
+        if (askHistory) {
+            // reply with our history
+            rtc.send(user, {svg: {history: history.map(figure => {
+                return { from: figure.from, create: figure.create, attr: figure.attr, isDone: figure.isDone };
+            })}});
         }
-    }
+        else if (reset) {
+            history = [];
+            svg.clear();
+        }
+        else if (create) {
+            const elem = handleCreate[create.kind](create);
+            history.push({ elem: elem, from: user, create: create, attr: {}, isDone: false});
+            cursors[user] = history[history.length - 1];
+        }
+        else if (update) {
+            const figure = cursors[user];
+            figure.elem.attr(update);
+            figure.attr = { ...figure.attr, ...update };
+        }
+        else if (end) {
+            cursors[user].isDone = true;
+            cursors[user] = null;
+        }
+    };
 
-    onJoin(user) {
-        this.pushChatMessage(null, `${user} has joined the room.`, true);
-    }
+    if (rtc.getPeers().size > 1) { // we are not alone, ask someone about the history
+        // Storing messages received before history.
+        const waitingMsgs = [];
 
-    onLeave(user) {
-        this.pushChatMessage(null, `${user} has left the room.`, true);
-        this._camerasElem.removeChild(this._cameras[user].div);
-        delete this._cameras[user];
-    }
-
-    static async askRoom() {
-        const form = document.getElementById("joinForm");
-        const formPopup = new jvPopup(form);
-        let session = null;
-        while (true) {
-            const formData = await formPopup.display("keep");
-            try {
-                const action = formData.get("action");
-                const roomID = formData.get("roomID");
-                const password = formData.get("password");
-                const username = formData.get("username");
-                if (action === "create") {
-                    session = await jvSession.create(SERVER_URL, "jv-whiteboard", password, username);
-                } else if (action === "join") {
-                    session = await jvSession.join(SERVER_URL, "jv-whiteboard", roomID, password, username);
+        // Waiting for someone sending history
+        const { history, historyHandler } = await new Promise((resolve,reject) => {
+            let historyFound = false;
+            const historyHandler = (from, {svg}) => {
+                if (!svg) return;
+                if (svg.history) {
+                    // Ensuring we are not treating twice the history (i.e. from two peers)
+                    if (historyFound) return;
+                    historyFound = true;
+                    resolve({history: svg.history, handler: historyHandler});
                 } else {
-                    throw new Error(`Unkown action ${action}...`);
+                    // Cannot handle it without history
+                    waitingMsgs.push({from: from, svg: svg});
                 }
+            };
+            rtc.receptionHandlers.add(historyHandler);
+            rtc.send(null, {svg: {askHistory: true}});
+        });
+
+        // Recreating the whiteboard figure by figure
+        for (let { from, create, attr, isDone } of history) {
+            handleMessage(from, {create: create});
+            handleMessage(from, {update: attr});
+            if (isDone)
+                handleMessage(from, {end: true});
+        }
+        // Handling waiting messages
+        for (let { from, svg } of waitingMsgs)
+            handleMessage(from, svg);
+        // Receive messages directly without using 'waitingMsgs'
+        rtc.receptionHandlers.delete(historyHandler);
+    }
+    rtc.receptionHandlers.add((from, {svg}) => { if (svg) handleMessage(from, svg); });
+
+    let cursorInfo = null; // useful to store data while editing a figure.
+
+    // Emitting our own events:
+
+    // Creation of figures
+    svgElem.onmousedown = (e) => {
+        const svgRect = svgElem.getBoundingClientRect();
+        const pos = [ e.clientX - svgRect.left, e.clientY - svgRect.top ];
+        const stroke = {color: $("#toolColor").value, opacity: $("#toolOpacity").value, width: $("#toolThickness").value, linecap: "round"};
+        const msg = {create: {kind: $("#toolCategory").value, stroke: stroke, pos: pos}};
+        cursorInfo = "";
+        switch (msg.create.kind) {
+            case "emptyRect": case "filledRect": case "emptyCircle": case "filledCircle":
+                cursorInfo = pos;
                 break;
-            } catch(e) {
-                alert(e.toString());
+            case "text":
+                msg.create.text = this.toolText.value;
+                msg.create.size = this.toolSize.value;
+                break;
+        }
+        rtc.send(null, {svg: msg});
+    };
+
+    // Edition of figures
+    svgElem.onmousemove = (e) => {
+        if (cursorInfo === null) return;
+        const svgRect = svgElem.getBoundingClientRect();
+        const pos = [ e.clientX - svgRect.left, e.clientY - svgRect.top ];
+        switch ($("#toolCategory").value) {
+            case "pencil":
+                cursorInfo = `${cursorInfo} ${pos[0]},${pos[1]}`;
+                rtc.send(null, {svg: {update: {points: cursorInfo}}});
+                break;
+            case "line":
+                rtc.send(null, {svg: {update: {x2: pos[0], y2: pos[1]}}});
+                break;
+            case "emptyRect":
+            case "filledRect": {
+                const x1 = Math.min(cursorInfo[0], pos[0]), x2 = Math.max(cursorInfo[0], pos[0]);
+                const y1 = Math.min(cursorInfo[1], pos[1]), y2 = Math.max(cursorInfo[1], pos[1]);
+                rtc.send(null, {svg: {update: {x: x1, y: y1, width: x2-x1, height: y2-y1 }}});
+                break; }
+            case "emptyCircle":
+            case "filledCircle": {
+                const x1 = Math.min(cursorInfo[0], pos[0]), x2 = Math.max(cursorInfo[0], pos[0]);
+                const y1 = Math.min(cursorInfo[1], pos[1]), y2 = Math.max(cursorInfo[1], pos[1]);
+                rtc.send(null, {svg: {update: { cx: (x1+x2)/2, cy: (y1+y2)/2, rx: (x2-x1)/2, ry: (y2-y1)/2 }}});
+                break; }
+            case "text": {
+                rtc.send(null, {svg: {update: {x: pos[0], y: pos[1]}}});
+                break;
             }
         }
-        formPopup.destroy();
-        return await new jvWhiteboard().init(await jvSessionRTC.wrap(session));
-    }
+    };
 
+    svgElem.onmouseup = (e) => {
+        rtc.send(null, {svg: {stop: true}});
+        cursorInfo = null;
+    };
 }
 
+(async function () {
+    // We initialize a WebRTC session over the signaling session.
+    const rtc = await jvSessionRTC.wrap(await InitSignalingSession());
+    // Each handler registered in rtc.receptionHandlers will be called by rtc.onReception()
+    rtc.receptionHandlers = new Set();
+    rtc.onReception = (from, msg) => rtc.receptionHandlers.forEach(handler => handler(from, msg));
+    $("#roomID").textContent = `ID: ${rtc.id}`;
+    $("#main").style.display = "";
 
-let whiteboard = null; // storing whiteboard for debugging purposes in browser console.
-jvWhiteboard.askRoom().then(w => { whiteboard = w; });
-
-function ResetBoard() {
-    whiteboard._svg.reset();
-}
+    SetupCameras(rtc);
+    SetupChat(rtc);
+    SetupSVG(rtc);
+})();

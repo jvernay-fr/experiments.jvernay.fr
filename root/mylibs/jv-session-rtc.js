@@ -11,7 +11,12 @@ class jvSessionRTC {
     static async wrap(signaling_session) {
         return await new jvSessionRTC()._init(signaling_session);
     }
-    
+
+    // Returns a Map of (username => RTCPeerConnection), ordered chronologically by arrivals.
+    getPeers() {
+        return this._peers;
+    }
+
     // Returns the list of usernames, ordered chronologically by arrivals.
     getUsers() {
         return this._peers.keys();
@@ -41,6 +46,31 @@ class jvSessionRTC {
         }
     }
 
+    // Starts to share a MediaStream to a user. Does not check if the user actually exist.
+    // The recipient can react by overriding "onStreamBegin".
+    // Passing user=null will cause a broadcast (MediaStream sent to all users, including itself).
+    beginStream(user, mediaStream) {
+        if (user === null) {
+            for (let user of this.getUsers()) this.beginStream(user, mediaStream);
+        } else if (user === this.username) {
+            this._onTrack(this.username, null, [mediaStream]);
+        } else {
+            for (let track of mediaStream.getTracks())
+                this._peers.get(user).addTrack(track, mediaStream);
+        }
+    }
+    // Stops sharing a MediaStream to a user.
+    // The recipient can react by overriding "onStreamEnd".
+    endStream(user, mediaStream) {
+        if (user === null) {
+            for (let user of this.getUsers()) this.sendStream(user, mediaStream);
+        } else if (user === this.username) {   
+            //
+        } else {
+            this_peers.get(user).jvrtc_datachannel.send(JSON.stringify({endStream: mediaStream.id}));
+        }
+    }
+
     // Send a request to a user, and returns when a response is received.
     // The users can react to request by overriding "onRequest".
     // Passing user=null is NOT allowed.
@@ -56,9 +86,16 @@ class jvSessionRTC {
     }
 
     // Called when a request is received. Should be overriden, e.g. "session.onRequest = async function(...) {...};".
-    // 'reply' is a function to be called to give the response to the request.
-    // 'reply(answer)' must be called, else the requesting user will be awaiting forever.
-    async onRequest(from, msg, reply) { reply(`REQUEST NOT HANDLED: ${msg}`); }
+    // You must return the response, which will be passed to the asker.
+    async onRequest(from, msg) { return `REQUEST NOT HANDLED: ${msg}`; }
+
+    // Called when someone starts a MediaStream. Should be overriden.
+    // May return a value, which will be passed to the corresponding onStreamEnd().
+    async onStreamBegin(from, mediaStream) { console.log(`STREAM FROM ${from} STARTED.`); }
+
+    // Called when someone ends a MediaStream. Should be overriden.
+    // 'data' is the value returned by onStreamBegin.
+    async onStreamEnd(from, data) { console.log(`STREAM FROM ${from} ENDED.`); }
 
     // Called when a message (which is not a request) is received. Should be overriden.
     async onReception(from, msg) { console.log(`MESSAGE FROM ${from}: ${msg}`); }
@@ -99,7 +136,13 @@ class jvSessionRTC {
         this._waitingDataChannels = new Map(); // username => [resolve,reject]
         let waitingPromises = [];
 
+        // Will contain all streams opened by peers.
+        // _streamsPerUser will allow to properly close streams when a user suddenly disconnects.
+        this._streams = {}; // streamId => value returned from onStreamBegin
+        this._streamsPerUser = {}; // username => Set(streamId)
+
         for (let username of this._signaler.getUsers()) {
+            this._streamsPerUser[username] = new Set();
             if (username === this.username) continue;
 
             waitingPromises.push(new Promise((resolve, reject) => {
@@ -131,8 +174,18 @@ class jvSessionRTC {
         peerConnection.jvrtc_polite = !is_initiator;
         // Handler for data channel
         peerConnection.ondatachannel = event => this._initDataChannel(username, event.channel);
+        // Handler for tracks
+        peerConnection.ontrack = event => this._onTrack(username, event.track, event.streams);
 
         return peerConnection;
+    }
+
+    _onTrack(username, track, streams) {
+        for (let stream of streams) {
+            if (stream.id in this._streams) continue;
+            this._streams[stream.id] = this.onStreamBegin(username, stream);
+            this._streamsPerUser[username].add(stream.id);
+        }
     }
 
     _initDataChannel(username, channel) {
@@ -168,6 +221,11 @@ class jvSessionRTC {
         const msg = JSON.parse(event.data);
         if (msg.message !== undefined)
             this.onReception(username, msg.message);
+        else if (msg.endStream !== undefined) {
+            this.onStreamEnd(username, this._streams[msg.endStream]);
+            delete this._streams[msg.endStream];
+            this._streamsPerUser[username].delete(msg.endStream);
+        }
     }
 
 
@@ -182,14 +240,20 @@ class jvSessionRTC {
     }
 
     async _onSignalingJoin(username) {
+        this._streamsPerUser[username] = new Set();
         this._initPeer(username, false); // is_initiator = false
     }
 
     async _onSignalingLeave(username) {
         this._peers.delete(username);
+        for (let stream of this._streamsPerUser[username].values()) {
+            this.onStreamEnd(username, this._streams[stream]);
+            delete this._streams[stream];
+        }
+        delete this._streamsPerUser[username];
     }
 
-    async _onSignalingRequest(username, msg, reply) {
+    async _onSignalingRequest(username, msg) {
         if (msg._jvrtc_description) {
             // implementing perfect negotiation pattern to avoid collisions of negotiations
             // https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Perfect_negotiation
@@ -197,16 +261,16 @@ class jvSessionRTC {
             const collision = peerConnection.jvrtc_makingOffer || peerConnection.signalingState != "stable";
             if (collision && !peerConnection.jvrtc_polite) {
                 // we are impolite, we discard the received offer.
-                reply(null);
+                return null;
             } else {
                 // we are polite or there is no collision: we accept the received offer.
                 await peerConnection.setRemoteDescription(msg._jvrtc_description);
                 await peerConnection.setLocalDescription();
                 
-                reply(peerConnection.localDescription);
+                return peerConnection.localDescription;
             }
         } else {
-            reply("UNHANDLED");
+            return "UNHANDLED";
         }
     }
 
