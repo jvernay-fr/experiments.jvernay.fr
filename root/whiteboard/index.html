@@ -52,8 +52,6 @@
             </div>
             <div id="right">
                 <div id="top">
-                    <button disabled>Help</button>
-                    <button disabled>Info</button>
                     <h2 id="roomID"></h2>
                 </div>
                 <div id="chat">
@@ -64,7 +62,7 @@
                 <form id="chatInput">
                     <textarea id="chatInputMessage" placeholder="Your message..." autocomplete="off" minlength="1" required rows="3" spellcheck="true"></textarea>
                     <div id="chatButtons">
-                        <input disabled type="button" value="File...">
+                        <input id="fileButton" type="button" value="File...">
                         <input type="submit" value="Send">
                     </div>
                 </form>
@@ -88,11 +86,17 @@
                 <hr/>
                 <p>
                     jvWhiteboard is an experimental remote tool for friends and teams.
-                    It allows a group to interact using chat, voice, camera and a whiteboard.
+                    It allows a group to interact using textual chat, camera and a whiteboard.
+                    Users can also share files between themselves.
                 </p><p>
-                    It is free (as in freedom, under the AGPL license), on <a href="https://github.com/jvernay-fr/experiments.jvernay.fr">GitHub</a>.
-                    Under the hood, the communication is peer-to-peer (server is only used for signaling)
-                    and it is implemented using the WebRTC protocol.
+                    Concerning data security, only room management data is sent to the server (room's ID, password and list of usernames).
+                    Everything else (audio/video, chat, files and drawings) is shared encrypted peer-to-peer, without a server (using WebRTC).
+                    This means that only the room members will have access to these informations.
+                    The room management data are not stored on disk and are discarded when there are no user left in the room.
+                </p><p>
+                    jvWhiteboard is free (as in freedom, under the AGPL license), on <a href="https://github.com/jvernay-fr/experiments.jvernay.fr">GitHub</a>.
+                    Under the hood, the room management (signaling) is done with Websockets.
+                    The communication is peer-to-peer, implemented using WebRTC.
                 </p>
                 <hr/>
                 <ul>
@@ -107,10 +111,30 @@
                     The drawing panel will be blank for everyone, and the current content will be lost.
                 </p>
                 <ul>
-                    <li><input type="submit" value="Reset whiteboard" id="resetConfirmBtn"></li>
-                    <li><input type="submit" value="Cancel"></li>
+                    <li><input type="submit" name="reset" value="Reset whiteboard"></li>
+                    <li><input type="submit" name="cancel" value="Cancel"></li>
                 </ul>
             </form>
+            <form id="shareFile">
+                <h2>Share a file</h2>
+                <p>
+                    The file will be available for others to download until you quit the room.
+                    Only people already connected will have access to this file.
+                </p>
+                <ul><li><input type="file" name="file"></li></ul>
+                <ul>
+                    <li><input name="share" type="submit" value="Share file"></li>
+                    <li><input name="cancel" type="submit" value="Cancel"></li>
+                </ul>
+            </form>
+
+            <div id="fileSharedMsg">
+                <div>
+                    <strong class="user"></strong> has shared the file <strong class="file"></strong>.
+                    <button>Download</button>
+                </div>
+                <progress value="0" max="0" style="display:none"></progress>
+            </div>
         </div>
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/svg.js/3.0.16/svg.min.js"></script>
@@ -119,6 +143,17 @@
         <script src="popup.js"></script>
         <script src="/mylibs/jv-session.js"></script>
         <script src="/mylibs/jv-session-rtc.js"></script>
+
+        <script>
+            TRANSLATE = {
+                mediaError(e) { return `Error while opening your camera and microphone: ${e}`; },
+                reset(user) { return `${user} has reset the whiteboard.`; },
+                join(user) { return `${user} has joined the room.`; },
+                leave(user) { return `${user} has left the room.`; },
+                downloading() { return `Downloading...`; },
+                downloadLocal() { return `Download (local)`; },
+            }
+        </script>
         <script src="main.js"></script>
     </body>
 </html>

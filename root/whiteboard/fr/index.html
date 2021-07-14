@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8"/>
+        <title>jvWhiteboard</title>
+        <link rel="stylesheet" href="../style.css" type="text/css">
+    </head>
+    <body>
+
+        <main id="main" style="display:none">
+            <div id="left">
+                <div id="cameras"></div>
+                <div id="whiteboard">
+                    <div id="tools">
+                        <select id="toolCategory">
+                            <option value="pencil">✎&emsp; Pinceau</option>
+                            <option value="line">㇀&emsp; Ligne</option>
+                            <option value="emptyRect">□&emsp; Rectangle</option>
+                            <option value="filledRect">■&emsp; Rectangle plein</option>
+                            <option value="emptyCircle">○&emsp; Cercle</option>
+                            <option value="filledCircle">●&emsp; Cercle plein</option>
+                            <option value="text">T⃞ &emsp; Texte</option>
+                        </select>
+                        <select id="toolThickness">
+                            <option value="5">▏&emsp; Très fin</option>
+                            <option value="10">▎&emsp; Fin</option>
+                            <option value="20">▌&emsp; Normal</option>
+                            <option value="35">▊&emsp; Épais</option>
+                            <option value="50">█&emsp; Très épais</option>
+                        </select>
+                        <select id="toolSize">
+                            <option value="10">10&emsp; Très petit</option>
+                            <option value="20">20&emsp; Petit</option>
+                            <option value="40">40&emsp; Normal</option>
+                            <option value="70">70&emsp; Grand</option>
+                            <option value="90">90&emsp; Très grand</option>
+                        </select>
+                        <input id="toolColor" type="color">
+                        <select id="toolOpacity">
+                            <option value="1">█&emsp; Opacité 100%</option>
+                            <option value="0.75">▓&emsp; Opacité 75%</option>
+                            <option value="0.50">▒&emsp; Opacité 50%</option>
+                            <option value="0.25">░&emsp; Opacité 25%</option>
+                        </select>
+                        <textarea id="toolText" placeholder="Texte..."></textarea>
+                    </div>
+                    <div id="globalActions">
+                        <button id="saveButton" title="Enregistrer">🖼</button>
+                        <button id="resetButton" title="Réinitialiser">🚫</button>
+                    </div>
+                </div>
+            </div>
+            <div id="right">
+                <div id="top">
+                    <h2 id="roomID"></h2>
+                </div>
+                <div id="chat">
+                    <div class="meta">
+                        Vous avez rejoint la salle.
+                    </div>
+                </div>
+                <form id="chatInput">
+                    <textarea id="chatInputMessage" placeholder="Votre message..." autocomplete="off" minlength="1" required rows="3" spellcheck="true"></textarea>
+                    <div id="chatButtons">
+                        <input id="fileButton" type="button" value="Fichier...">
+                        <input type="submit" value="Envoyer">
+                    </div>
+                </form>
+            </div>
+        </main>
+
+
+        <div style="display:none">
+            <form id="joinForm">
+                <h1>jvWhiteboard</h1>
+                <ul>
+                    <li><input type="radio" id="actionCreate" name="action" value="create"><label for="actionCreate">Créer une salle</label></li>
+                    <li><input type="radio" id="actionJoin" name="action" value="join" checked><label for="actionJoin">Rejoindre une salle</label>
+                        <input type="text" name="roomID" placeholder="ID..." size="6" minlength="6" maxlength="6" pattern="[A-F0-9]{6}"></li>
+                </ul>
+                <ul>
+                    <li><input type="text" name="password" placeholder="Mot de passe..."></li>
+                    <li><input type="text" name="username" placeholder="Nom d'utilisateur..." minlength="1" required></li>
+                    <li><input type="submit" value="Connect"></li>
+                </ul>
+                <hr/>
+                <p>
+                    jvWhiteboard est un outil distanciel expérimental pour amis et équipes.
+                    Il permet à un groupe d'interagir avec une discussion textuelle, la caméra, et un tableau interactif.
+                    Les utilisateurs peuvent également s'échanger des fichiers entre eux.
+                </p><p>
+                    Concernant la sécurité des données, seulement les données pour la gestion des salles sont envoyés au serveur
+                    (l'ID, le mot de passe et la liste des noms d'utilisateurs pour chaque salle).
+                    Tout le reste (audio/vidéo, texte, fichiers et dessins) est envoyé chiffré en pair-à-pair, sans serveur.
+                    Cela signifie que seuls les membres d'une salle ont accès à ces informations.
+                    Les données pour la gestion des salles ne sont pas stockées dans des fichiers, et elles sont supprimées
+                    lorsqu'il n'y a plus d'utilisateurs dans la salle.
+                </p><p>
+                    jvWhiteboard est gratuit et libre (sous la license AGPL), disponible sur <a href="https://github.com/jvernay-fr/experiments.jvernay.fr">GitHub</a>.
+                    En interne, la gestion des salles (signaling) est réalisée avec des Websockets.
+                    La communication pair-à-pair est implémentée avec WebRTC.
+                </p>
+                <hr/>
+                <ul>
+                    Bibliothèques utilisées :
+                    <li><a href="https://svgdotjs.github.io/">SVG.js</a></li>
+                    <li><a href="https://github.com/exupero/saveSvgAsPng">saveSvgAsPng.js</a></li>
+                </ul>
+            </form>
+            <form id="resetConfirm">
+                <h2>Voulez-vous réinitialiser le tableau blanc ?</h2>
+                <p>
+                    La zone de dession sera effacée pour tous, et le contenu actuel sera perdu.
+                </p>
+                <ul>
+                    <li><input type="submit" name="reset" value="Reset whiteboard"></li>
+                    <li><input type="submit" name="cancel" value="Cancel"></li>
+                </ul>
+            </form>
+            <form id="shareFile">
+                <h2>Envoyer un fichier</h2>
+                <p>
+                    Le fichier sera téléchargeable par les autres memberes jusqu'à que vous quittiez la salle.
+                    Seules les personnes déjà connectées auront accès au fichier.
+                </p>
+                <ul><li><input type="file" name="file"></li></ul>
+                <ul>
+                    <li><input name="share" type="submit" value="Partager le fichier"></li>
+                    <li><input name="cancel" type="submit" value="Annuler"></li>
+                </ul>
+            </form>
+
+            <div id="fileSharedMsg">
+                <div>
+                    <strong class="user"></strong> a partagé le fichier <strong class="file"></strong>.
+                    <button>Télécharger</button>
+                </div>
+                <progress value="0" max="0" style="display:none"></progress>
+            </div>
+        </div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/svg.js/3.0.16/svg.min.js"></script>
+
+        <script src="../saveSvgAsPng.js"></script>
+        <script src="../popup.js"></script>
+        <script src="/mylibs/jv-session.js"></script>
+        <script src="/mylibs/jv-session-rtc.js"></script>
+
+        <script>
+            TRANSLATE = {
+                mediaError(e) { return `Erreur en ouvrant votre caméra et microphone : ${e}`; },
+                reset(user) { return `${user} a réinitialisé le tableau blanc.`; },
+                join(user) { return `${user} a rejoint la salle.`; },
+                leave(user) { return `${user} a quitté la salle.`; },
+                downloading() { return `Téléchargement...`; },
+                downloadLocal() { return `Télécharger (local)`; },
+            }
+        </script>
+        <script src="../main.js"></script>
+    </body>
+</html>
+
+
+

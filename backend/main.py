@@ -249,7 +249,7 @@ async def handleWebsocket(websocket, path=None):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.ERROR)
 
     start_server = websockets.serve(handleWebsocket, "0.0.0.0", 1234)
 

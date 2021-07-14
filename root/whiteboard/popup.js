@@ -33,14 +33,17 @@ class jvPopup {
     // - "destroy": destroy() will be called after submission
     // - "hide": hide() will be called, the popup will not be destroyed
     // - other: neither destroy() nor hide() will be called.
-    // The promise returns a FormData when resolved.
+    // The promise returns a FormData when resolved, which has the extra member "_submit_",
+    // which corresponds to the "name" attribute of the submitter button (or empty string).
     async display(then = "destroy") {
         return await new Promise((resolve,reject) => {
             this._form.addEventListener("submit", event => {
                 event.preventDefault();
                 if (then === "hide") this.hide();
                 if (then === "destroy") this.destroy();
-                resolve(new FormData(this._form));
+                let formData = new FormData(this._form);
+                formData.set("_submit_", (event.submitter && event.submitter.name) || "");
+                resolve(formData);
             }, {once: true});
             this._popupBG.style.display = "flex";
         });

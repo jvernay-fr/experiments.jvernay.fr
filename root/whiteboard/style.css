@@ -1,17 +1,17 @@
 body, button, input, textarea { font-family: sans-serif; font-size: 1.5rem; }
 
-#joinForm ul, #resetConfirm ul {
+form ul {
     display: flex;
     padding: 0;
     justify-content: space-evenly;
 }
 
-#joinForm li, #resetConfirm li {
+form li {
     display: inline;
     padding: 0 1em;
 }
 
-#joinForm p, #resetConfirm p {
+form p {
     max-width: 800px;
 }
 
@@ -26,7 +26,7 @@ body, button, input, textarea { font-family: sans-serif; font-size: 1.5rem; }
 }
 
 #left {
-    flex: 1;
+    flex: 3;
 }
 
 #cameras {
@@ -61,11 +61,10 @@ body, button, input, textarea { font-family: sans-serif; font-size: 1.5rem; }
 }
 
 #right {
-    flex: 0;
+    flex: 1;
     display: flex;
     flex-direction: column;
     border-left: 2px solid black;
-    width: 600px;
 }
 
 #top {
@@ -93,10 +92,11 @@ body, button, input, textarea { font-family: sans-serif; font-size: 1.5rem; }
 #chatInputMessage {
     flex: 1;
     resize: none;
+    width: 80%;
 }
 
 
-#chat div {
+#chat > div {
     padding: 0.3em;
     border-bottom: 1px solid lightgray;
     font-size: 1.2rem;
@@ -139,13 +139,15 @@ body, button, input, textarea { font-family: sans-serif; font-size: 1.5rem; }
 }
 
 #tools > *, #globalActions > * {
-    height: 60px;
+    height: 40px;
     padding: 10px 0;
     margin: 0 5px;
+    font-size: 15px;
+    width: 50px;
 }
 
-#tools > select {
-    width: 60px;
+#toolColor {
+    padding: 5px 10px;
 }
 
 

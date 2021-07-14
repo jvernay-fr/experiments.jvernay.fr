@@ -63,11 +63,40 @@ class jvSessionRTC {
     // The recipient can react by overriding "onStreamEnd".
     endStream(user, mediaStream) {
         if (user === null) {
-            for (let user of this.getUsers()) this.sendStream(user, mediaStream);
+            for (let user of this.getUsers()) this.endStream(user, mediaStream);
         } else if (user === this.username) {   
-            //
+            this.onStreamEnd(user, mediaStream);
+            delete this._streams[mediaStream.id];
+            this._streamsPerUser[user].delete(mediaStream.id);
         } else {
-            this_peers.get(user).jvrtc_datachannel.send(JSON.stringify({endStream: mediaStream.id}));
+            this._peers.get(user).jvrtc_datachannel.send(JSON.stringify({endStream: mediaStream.id}));
+        }
+    }
+
+    async sendFile(user, file, data) {
+        if (user === null) {
+            for (let user of this.getUsers()) this.sendFile(user, file, data);
+        } else if (user === this.username) {
+            this.onFileReception(user, file, data);
+        } else {
+            const fileChannel = this._peers.get(user).createDataChannel("_jvrtc_file");
+
+            await new Promise((resolve,reject) => {
+                fileChannel.onmessage = event => resolve(event.data);
+                fileChannel.onopen = () => fileChannel.send(JSON.stringify({
+                    name: file.name, size: file.size, type: file.type, data: data,
+                }));
+            });
+
+            await new Promise((resolve, reject) => {
+                fileChannel.onmessage = event => resolve(event.data);
+                const chunkSize = 16000;
+                const nbFullChunks = Math.floor(file.size / chunkSize);
+                for (let i = 0; i < nbFullChunks; ++i) {
+                    fileChannel.send(file.slice(i*chunkSize, (i+1)*chunkSize));
+                }
+                fileChannel.send(file.slice(nbFullChunks*chunkSize));
+            });
         }
     }
 
@@ -99,6 +128,9 @@ class jvSessionRTC {
 
     // Called when a message (which is not a request) is received. Should be overriden.
     async onReception(from, msg) { console.log(`MESSAGE FROM ${from}: ${msg}`); }
+
+    // Called when a message (which is not a request) is received. Should be overriden.
+    async onFileReception(from, file, data) { console.log("FILE RECEIVED", from, file, data); }
 
     // Called when a user has joined the session. Should be overriden.
     async onJoin(username) { console.log(`${username} has joined the session.`); }
@@ -149,7 +181,7 @@ class jvSessionRTC {
                 this._waitingDataChannels.set(username, [resolve, reject]);
 
                 const peerConnection = this._initPeer(username, true); // is_initiator = true
-                const dataChannel = peerConnection.createDataChannel("_jvrtc");
+                const dataChannel = peerConnection.createDataChannel("_jvrtc_main");
                 peerConnection.jvrtc_datachannel = dataChannel;
                 this._initDataChannel(username, dataChannel);
             }));
@@ -189,14 +221,38 @@ class jvSessionRTC {
     }
 
     _initDataChannel(username, channel) {
-        this._peers.get(username).jvrtc_datachannel = channel;
-        channel.onopen = () => this._onDataChannelOpen(username);
-        channel.onmessage = event => this._onDataChannelMessage(username, channel, event);
-        channel.onclose = () => this._onDataChannelClose(username);
-        channel.onerror = event => this._onDataChannelError(event, username);
+        if (channel.label === "_jvrtc_main") {
+            this._peers.get(username).jvrtc_datachannel = channel;
+            channel.onopen = (event) => this._onDataChannelOpen(username, event);
+            channel.onmessage = event => this._onDataChannelMessage(username, channel, event);
+            channel.onclose = () => this._onDataChannelClose(username);
+            channel.onerror = event => this._onDataChannelError(event, username);
+        } else {
+            channel.onerror = event => this._onDataChannelError(event, username);
+
+            let metadata = undefined;
+            let chunks = [];
+            let size = 0;
+
+            
+            channel.onmessage = event => {
+                if (metadata === undefined) {
+                    metadata = JSON.parse(event.data);
+                    channel.send("ok");
+                } else {
+                    chunks.push(event.data);
+                    size += event.data.size;
+                    if (size === metadata.size) {
+                        channel.send("ok");
+                        let file = new File(chunks, metadata.name, {type: metadata.type});
+                        this.onFileReception(username, file, metadata.data);
+                    }
+                }
+            };
+        }
     }
 
-    async _onDataChannelOpen(username) {
+    async _onDataChannelOpen(username, event) {
         if (this._waitingDataChannels) {
             // we are the caller
             this._waitingDataChannels.get(username)[0](); // resolve

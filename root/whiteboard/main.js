@@ -2,6 +2,23 @@
 // Helper for DOM access
 const $ = (query) => document.querySelector(query);
 
+const HtmlUtil = {
+    strong(text) { 
+        const strong = document.createElement("strong");
+        strong.textContent = text;
+        return strong;
+    }
+};
+
+if (TRANSLATE === undefined)
+    TRANSLATE = {
+        mediaError(e) { return `Error while opening your camera and microphone: ${e}`; },
+        reset(user) { return `${user} has reset the whiteboard.`; },
+        join(user) { return `${user} has joined the room.`; },
+        leave(user) { return `${user} has left the room.`; },
+        downloading() { return `Downloading...`; },
+        downloadLocal() { return `Download (local)`; },
+    }
 
 async function InitSignalingSession() {// First, we ask the room ID, password, etc, by displaying a popup.
     const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -70,7 +87,7 @@ async function SetupCameras(rtc) {
         });
     } catch(e) {
         // we could not open the stream, notify the user.
-        alert(`Error while opening your camera and microphone: ${e.toString()}`);
+        alert(TRANSLATE.mediaError(e.toString()));
     }
     // ask other peers their videos
     rtc.send(null, {sendmevideo: true});
@@ -79,11 +96,8 @@ async function SetupCameras(rtc) {
 async function SetupChat(rtc) {
     const displayMessage = (from, message, isMeta) => {
         const div = document.createElement("div");
-        if (from) {
-            const name = document.createElement("strong");
-            name.textContent = `${from}: `;
-            div.appendChild(name);
-        }
+        if (from) 
+            div.appendChild(HtmlUtil.strong(`${from}: `));
         div.appendChild(document.createTextNode(message));
         if (isMeta) div.className = "meta";
         $('#chat').appendChild(div);
@@ -106,14 +120,86 @@ async function SetupChat(rtc) {
         // Reacting to message sent.
         if (chat) displayMessage(from, chat, false);
         // Reacting to reset whiteboard.
-        if (svg && svg.reset) displayMessage(null, `${from} has reset the whiteboard.`, true);
+        if (svg && svg.reset) displayMessage(null, TRANSLATE.reset(from), true);
     });
     // Reacting to join/leave
     rtc.onJoin = user => {
-        displayMessage(null, `${user} has joined the room.`, true);
+        displayMessage(null, TRANSLATE.join(user), true);
     };
     rtc.onLeave = user => {
-        displayMessage(null, `${user} has left the room.`, true);
+        displayMessage(null, TRANSLATE.leave(user), true);
+    };
+}
+
+async function SetupFiles(rtc) {
+    // Dictionnary {user: [[<button>,<progress>]|ObjectURL, ...], ...}
+    const availableFiles = {};
+    const myFiles = [];
+    let index = 0;
+
+    availableFiles[rtc.username] = [];
+    
+    // When the user submits a file, we send a {new_file:{...}} message.
+    $("#fileButton").onclick = async () => {
+        let formData =  await new jvPopup($("#shareFile")).display();
+        if (formData.get("_submit_") === "share") {
+            const file = formData.get("file");
+            if (!file) return; // do nothing if no file submitted
+            myFiles[++index] = file;
+            rtc.send(null, {new_file: {id: index, name: file.name, size: file.size, type: file.type }});
+        }
+    };
+
+
+    // When we receive a {new_file:{...}} message, displaying it in the chat.
+    // When we receive a {ask_file:{...}} message, sending file.
+    rtc.receptionHandlers.add((from, {new_file, ask_file}) => {
+        // Creating a message in chat for new_file 
+        if (new_file) {
+            const msg = $("#chat").appendChild($("#fileSharedMsg").cloneNode(true));
+            msg.querySelector(".user").textContent = from;
+            msg.querySelector(".file").textContent = new_file.name;
+            const button = msg.querySelector("button");
+            const progress = msg.querySelector("progress");
+            progress.value = 0;
+            progress.max = new_file.size;
+            
+            if (availableFiles[from] == undefined)
+                availableFiles[from] = [];
+            availableFiles[from][new_file.id] = [button, progress];
+
+            button.onclick = () => {
+                rtc.send(from, {ask_file: new_file.id });
+                button.disabled = true;
+                button.textContent = TRANSLATE.downloading();
+                progress.style.display = "";
+            };
+        }
+
+        if (ask_file) 
+            rtc.sendFile(from, myFiles[ask_file], ask_file);
+    });
+
+    // When receiving files
+    rtc.onFileReception = (from, file, id) => {
+        // must setTimeout, else button will not be updated again (why?)
+        setTimeout(() => {
+            const [button, progress] = availableFiles[from][id];
+            const url = URL.createObjectURL(file);
+            availableFiles[from][id] = url;
+            progress.style.display = "none";
+            
+            button.disabled = false;
+            button.textContent = TRANSLATE.downloadLocal();
+            button.onclick = () => {
+                // if the user wants to download it again
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = file.name;
+                a.click();
+            };
+            button.onclick();
+        });
     };
 }
 
@@ -132,8 +218,11 @@ async function SetupSVG(rtc) {
     $("#toolCategory").onchange(); // ensure cached form will not mess up
 
     // Global actions handlers
-    $("#resetButton").onclick = () => new jvPopup($("#resetConfirm")).display();
-    $("#resetConfirmBtn").onclick = () => rtc.send(null, {svg: {reset: true}});
+    $("#resetButton").onclick = async () => {
+        let formData = await new jvPopup($("#resetConfirm")).display();
+        if (formData.get("_submit_") === "reset")
+            rtc.send(null, {svg: {reset: true}});
+    };
     $("#saveButton").onclick = () => saveSvgAsPng(svgElem, "whiteboard.png");
 
     // Storing all figures, so a new comer can ask us the current whiteboard state.
@@ -291,4 +380,5 @@ async function SetupSVG(rtc) {
     SetupCameras(rtc);
     SetupChat(rtc);
     SetupSVG(rtc);
+    SetupFiles(rtc);
 })();
