@@ -164,3 +164,14 @@ svg {
     width: 100%;
     height: 100%;
 }
+
+#joinForm :not(h1) {
+    font-size: 1rem;
+}
+
+a.big-link {
+    display: block;
+    color: #03F;
+    font-family: DejaVu Sans Mono, Monaco, Lucida Console, Andale Mono, monospace;
+    text-align: center;
+}
